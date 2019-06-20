@@ -1,0 +1,410 @@
+---
+title: "Conceitos estatisticos para IA"
+output:
+  html_document: 
+    code_folding: hide
+    fig_caption: yes
+    fig_height: 5.0
+    highlight: tango
+    number_sections: yes
+    theme: cerulean
+    toc: yes
+---
+
+
+
+```{r load libraries, message=FALSE, warning=FALSE}
+library(corrplot)
+library(corrgram)
+library(skimr)
+library(knitr)
+library(ggplot2)
+library(dplyr)
+library(formattable)
+library(randomForest)
+library(caret)
+library(readr)
+library(gmodels)
+library(outliers)
+```
+******
+# Introdução
+******
+
+Esta análise aplica-se a um dataset de variantes do vinho portugues "Vinho Verde", possuindo diversos indicadores de suas caracteristicas, como acidez, teor alcoolico, quantidade de açucar, entre outros... 
+
+******
+# Carregando dados
+******
+
+```{r load data}
+vinhos <- read.csv("BaseWine_Red_e_White.csv", header = TRUE, sep = ";", dec = ",")
+```
+
+
+******
+# Análise Exploratória dos Dados
+******
+
+******
+## Conhecendo as variaveis
+******
+
+******
+### Sumario da Base original
+******
+```{r}
+summary(vinhos)
+```
+
+Dataset com 13 variaveis, dentre elas a variável "quality" indica a qualidade medida de cada vinho.
+
+ - **fixedacidity:** Indica a quantidade de acidos presente no vinho (voláteis ou não voláteis);
+ - **volatileacidity:** Indica a quantidade de ácido acético no vinho, que em níveis muito altos pode levar a um gosto desagradável de vinagre;
+ - **citricacid:** Indica a quantidade de ácido cítrico,  pode adicionar “frescura” e sabor aos vinhos;
+ - **residualsugar:** Indica a quantidade de açúcar restante depois que o processo de fermentação;
+ - **chlorides:** Indica a quantidade de sal no vinho;
+ - **freesulfurdioxide:** Indica a quantidade da forma livre de SO2, impede o crescimento microbiano e a oxidação do vinho, Garante condições melhores para os processos de vinificação da bebida, elimina bactérias e leveduras frágeis e indesejáveis, o que permite que apenas as melhores prossigam com o processo fermentativo. Além do mais, melhora o aroma e afina a cor da bebida;
+ - **totalsulfurdioxide:** Indica a quantidade de formas livres e encadernadas de S02; em baixas concentrações, o SO2 é quase indetectável no vinho, mas nas concentrações de SO2 livre acima de 50 ppm, o SO2 se torna evidente no nariz e no sabor do vinho;
+ - **density:**indica a densidade do vinho, a densidade é próxima à da água, dependendo do percentual de álcool e teor de açúcar;
+ - **pH:** descreve como o vinho é acídico ou básico numa escala de 0 (muito ácido) a 14 (muito básico); a maioria dos vinhos tem entre 3-4 na escala de pH;
+ - **sulphates:** Indica a quantidade de sulfatos, um aditivo de vinho que pode contribuir para os níveis de gás de dióxido de enxofre (S02), que age como um antimicrobiano e antioxidante;
+ - **alcohol:** Indica o teor alcoólico percentual do vinho;
+ - **quality:** variável de saída (com base em dados sensoriais) que poderiam ser de 0 a 10 sendo zero muito ruim e 10 muito excelente;
+ - **Vinho:** variável qualitativa nominal que indica se o vinho é tinto ou branco;
+ 
+Como descrito no dataset a variável "quality" também é qualitativa, porém ordinal, para que possa ser analisada adequadamente é necessária a seguinte transformação:
+
+```{r}
+vinhos$quality <- as.factor(vinhos$quality)
+```
+
+
+******
+## Verificação da completude da amostra
+******
+
+É importante averiguarmos a existẽncia de dados incompletos na amostra de modo que possam influenciar a análise e o desenvolvimento dos modelos estatísticos:
+```{r results='asis'}
+skim(vinhos) %>% skimr::kable()
+```
+
+******
+## Divisão categórica
+******
+Dada a existência da varíável "Vinho" que divide o dataset em duas categorias é válido analisar quantitativas por categoria e para tal o dataset foi dividido em dois subsets a partir desta varíável.
+
+
+```{r}
+brancos <- vinhos%>%filter(Vinho == "WHITE")%>%select(2:14)
+tintos <- vinhos%>%filter(Vinho == "RED")%>%select(2:14)
+summary(brancos)
+summary(tintos)
+```
+ 
+```{r}
+hist.default <- function(x,
+                         breaks = "Sturges",
+                         freq = NULL,
+                         include.lowest = TRUE,
+                         normalcurve = TRUE,
+                         right = TRUE,
+                         density = NULL,
+                         angle = 45,
+                         col = NULL,
+                         border = NULL,
+                         main = paste("Histogram of", xname),
+                         ylim = NULL,
+                         xlab = xname,
+                         ylab = NULL,
+                         axes = TRUE,
+                         plot = TRUE,
+                         labels = FALSE,
+                         warn.unused = TRUE,
+                         ...)  {
+  xname <- paste(deparse(substitute(x), 500), collapse = "\n")
+
+  suppressWarnings(
+    h <- graphics::hist.default(
+      x = x,
+      breaks = breaks,
+      freq = freq,
+      include.lowest = include.lowest,
+      right = right,
+      density = density,
+      angle = angle,
+      col = col,
+      border = border,
+      main = main,
+      ylim = ylim,
+      xlab = xlab,
+      ylab = ylab,
+      axes = axes,
+      plot = plot,
+      labels = labels,
+      warn.unused = warn.unused,
+      ...
+    )
+  )
+
+  if (normalcurve == TRUE & plot == TRUE) {
+    x <- x[!is.na(x)]
+    xfit <- seq(min(x), max(x), length = 40)
+    yfit <- dnorm(xfit, mean = mean(x), sd = sd(x))
+    if (isTRUE(freq) | (is.null(freq) & is.null(density))) {
+      yfit <- yfit * diff(h$mids[1:2]) * length(x)
+    }
+    lines(xfit, yfit, col = "black", lwd = 2)
+  }
+
+  if (plot == TRUE) {
+    invisible(h)
+  } else {
+    h
+  }
+}
+
+plotaGraficos <- function(fVinho, label){
+par(mfrow = c(1,2))
+hist(fVinho, main = paste("Histograma de ",label), xlab = label, ylab="Frequência")
+abline(v = mean(fVinho) - 2 * sd(fVinho), col = "red")
+abline(v = mean(fVinho) + 2 * sd(fVinho), col = "red")
+boxplot(fVinho)
+q = quantile(fVinho)
+return(q[2] + 1.5 * q[2] -q[4])
+
+}
+```
+
+******
+## Detectando Outliers
+******
+Outliers são observações que apresentam grandes afastamentos das demais e/ou são inconsistentes com estas. Um bom método de verificar a existência de outliers é a análise gráfica, através de um histograma sobreposto pela distribuição normal e duas linhas que delimitem o limite mínimo e máximo de corte, também é usado o gráfico bloxpot. Pelo boxplor é possível determinar o ponto do outler com a seguinte fórmula:
+
+$$Q3 + 1,5 Q3 - Q1$$
+
+******
+### Vinhos Brancos
+******
+```{r}
+bOut.fixedacidity <- plotaGraficos(brancos$fixedacidity, "fixedacidity")
+bOut.volatileacidity <- plotaGraficos(brancos$volatileacidity, "volatileacidity")
+bOut.citricacid <- plotaGraficos(brancos$citricacid, "citricacid")
+bOut.residualsugar <- plotaGraficos(brancos$residualsugar, "residualsugar")
+bOut.chlorides <- plotaGraficos(brancos$chlorides, "chlorides")
+bOut.freesulfurdioxide <- plotaGraficos(brancos$freesulfurdioxide, "freesulfurdioxide")
+bOut.totalsulfurdioxide <- plotaGraficos(brancos$totalsulfurdioxide, "totalsulfurdioxide")
+bOut.density<- plotaGraficos(brancos$density, "density")
+bOut.pH <- plotaGraficos(brancos$pH, "pH")
+bOut.sulphates <- plotaGraficos(brancos$sulphates, "sulphates")
+bOut.alcohol <- plotaGraficos(brancos$alcohol, "alcohol")
+```
+
+******
+### Vinhos Tintos
+******
+```{r}
+tOut.fixedacidity <- plotaGraficos(tintos$fixedacidity, "fixedacidity")
+tOut.volatileacidity <- plotaGraficos(tintos$volatileacidity, "volatileacidity")
+tOut.citricacid <- plotaGraficos(tintos$citricacid, "citricacid")
+tOut.residualsugar <- plotaGraficos(tintos$residualsugar, "residualsugar")
+tOut.chlorides <- plotaGraficos(tintos$chlorides, "chlorides")
+tOut.freesulfurdioxide <- plotaGraficos(tintos$freesulfurdioxide, "freesulfurdioxide")
+tOut.totalsulfurdioxide <- plotaGraficos(tintos$totalsulfurdioxide, "totalsulfurdioxide")
+tOut.density<- plotaGraficos(tintos$density, "density")
+tOut.pH <- plotaGraficos(tintos$pH, "pH")
+tOut.sulphates <- plotaGraficos(tintos$sulphates, "sulphates")
+tOut.alcohol <- plotaGraficos(tintos$alcohol, "alcohol")
+```
+
+## Removendo Outliers
+### Vinhos Brancos
+```{r}
+brancos <- brancos%>%filter(fixedacidity < bOut.fixedacidity)
+brancos <- brancos%>%filter(volatileacidity < bOut.volatileacidity)
+brancos <- brancos%>%filter(citricacid < bOut.citricacid)
+brancos <- brancos%>%filter(residualsugar < bOut.residualsugar)
+brancos <- brancos%>%filter(chlorides < bOut.chlorides)
+brancos <- brancos%>%filter(freesulfurdioxide < bOut.freesulfurdioxide)
+brancos <- brancos%>%filter(totalsulfurdioxide < bOut.totalsulfurdioxide )
+brancos <- brancos%>%filter(totalsulfurdioxide < bOut.totalsulfurdioxide)
+brancos <- brancos%>%filter(pH < bOut.pH)
+brancos <- brancos%>%filter(sulphates < bOut.sulphates)
+brancos <- brancos%>%filter(alcohol < bOut.alcohol)
+dim(brancos)
+
+
+#plotaGraficos(brancos$fixedacidity, "fixedacidity")
+#plotaGraficos(brancos$volatileacidity, "volatileacidity")
+#plotaGraficos(brancos$citricacid, "citricacid")
+#plotaGraficos(brancos$residualsugar, "residualsugar")
+#plotaGraficos(brancos$chlorides, "chlorides")
+#plotaGraficos(brancos$freesulfurdioxide, "freesulfurdioxide")
+#plotaGraficos(brancos$totalsulfurdioxide, "totalsulfurdioxide")
+#plotaGraficos(brancos$density, "density")
+#plotaGraficos(brancos$pH, "pH")
+#plotaGraficos(brancos$sulphates, "sulphates")
+#plotaGraficos(brancos$alcohol, "alcohol")
+```
+
+### Vinhos Tintos
+```{r}
+#tintos <- tintos[-which(tintos$fixedacidity %in% tOut.fixedacidity),]
+#tintos <- tintos[-which(tintos$volatileacidity %in% tOut.volatileacidity),]
+#tintos <- tintos[-which(tintos$citricacid %in% tOut.residualsugar),]
+#tintos <- tintos[-which(tintos$residualsugar %in% tOut.residualsugar),]
+#tintos <- tintos[-which(tintos$chlorides %in% tOut.chlorides),]
+#tintos <- tintos[-which(tintos$freesulfurdioxide %in% tOut.freesulfurdioxide),]
+#tintos <- tintos[-which(tintos$totalsulfurdioxide %in% tOut.totalsulfurdioxide),]
+#tintos <- tintos[-which(tintos$density %in% tOut.density),]
+#tintos <- tintos[-which(tintos$pH %in% tOut.pH),]
+#tintos <- tintos[-which(tintos$sulphates %in% tOut.sulphates),]
+#tintos <- tintos[-which(tintos$alcohol %in% tOut.alcohol),]
+
+#plotaGraficos(tintos$fixedacidity, "fixedacidity")
+#plotaGraficos(tintos$volatileacidity, "volatileacidity")
+#plotaGraficos(tintos$citricacid, "citricacid")
+#plotaGraficos(tintos$residualsugar, "residualsugar")
+#plotaGraficos(tintos$chlorides, "chlorides")
+#plotaGraficos(tintos$freesulfurdioxide, "freesulfurdioxide")
+#plotaGraficos(tintos$totalsulfurdioxide, "totalsulfurdioxide")
+#plotaGraficos(tintos$density, "density")
+#plotaGraficos(tintos$pH, "pH")
+#plotaGraficos(tintos$sulphates, "sulphates")
+#plotaGraficos(tintos$alcohol, "alcohol")
+```
+
+******
+# Análise exploratória de dados
+******
+
+Primeiramente vamos analisar a variável quality separadamente
+```{r }
+
+#vinhos %>% group_by(quality) %>% summarise(count = n()) %>% 
+  #ggplot(aes(x = reorder(quality, count), y = count, fill = as.factor(quality), label = count)) +
+  #geom_bar(stat = "identity") + 
+  #geom_text(hjust = -.1) +
+ # theme_light() +
+  #scale_fill_brewer(palette = "Blues", direction = -1) +
+  #coord_flip(ylim = c(0, 3000)) +
+  #labs(x = "Quality", y = "Count", fill = "Quality")
+```
+
+
+
+******
+# Correlação de variaveis
+******
+
+Gerando correlação das variaveis para ajudar a entender quais variaveis são relacionadas e quais variaveis podem nos ajudar a decidir a qualidade do vinho
+```{r,message=FALSE,warning=FALSE}
+#corrplot(cor(vinhosret))
+```
+
+***
+# Correlação + Cluster
+***
+
+Incluindo cluster sobre os relacionamentos identificados
+
+```{r,message=FALSE,warning=FALSE}
+#corrplot(cor(vinhosret), order = "hclust", addrect = 2)
+```
+
+Pela análise temos algumas variáveis que parecem ter relação com a variavel quality: alcohol, 
+
+
+
+******
+# Gráficos de dispersão
+******
+
+Gerando gráficos de dispersão com todas as variáveis que apresentaram algum tipo de relação com a variável que decide a qualidade(quality) dos vinhos
+
+
+```{r}
+#par (mfrow=c(2,2))
+#plot (x = vinhosret$alcohol, y = vinhosret$quality,
+    #  main = "Relação com Teor alcoólico",
+   #   xlab = "Álcool",
+    #  ylab = "Qualidade")
+
+#plot (x = vinhosret$citricacid, y = vinhosret$quality,
+  #    main = "Relação com Ácido cítrico",
+    #  xlab = "Ácido cítrico",
+   #   ylab = "Qualidade")
+
+#plot (x = vinhosret$freesulfurdioxide, y = vinhosret$quality,
+  #    main = "Relação com Dióxido de enxofre livre",
+    #  xlab = "Dióxido de enxofre livre",
+   #   ylab = "Qualidade")
+
+#plot (x = vinhosret$density, y = vinhosret$quality,
+    #  main = "Relação com Densidade",
+   #   xlab = "Densidade",
+    #  ylab = "Qualidade")
+
+#plot (x = vinhosret$volatileacidity, y = vinhosret$quality,
+   #   main = "Relação com Acidez volátil",
+    #  xlab = "Acidez volátil",
+    #  ylab = "Qualidade")
+
+#plot (x = vinhosret$totalsulfurdioxide, y = vinhosret$quality,
+    #  main = "Relação com Dióxido de enxofre total",
+   #   xlab = "Dióxido de enxofre total",
+    #  ylab = "Qualidade")
+
+#plot (x = vinhosret$chlorides, y = vinhosret$quality,
+  #    main = "Relação com Cloretos",
+    #  xlab = "Cloretos",
+    #  ylab = "Qualidade")
+
+#plot (x = vinhosret$pH, y = vinhosret$quality,
+    #  main = "Relação com pH",
+     # xlab = "pH",
+    #  ylab = "Qualidade")
+
+```
+
+# Criando massa de teste e treino
+Para esse passo, separamos 70% da base como modelo de aprendizagem para treinar os algoritmos e 30% da base como modelo de testes, para validarmos se os algoritmos possuem assertividade
+
+```{r}
+#set.seed(1337)
+#indice_vinho <- createDataPartition(vinhosret$quality, p=0.7, list=F)
+#treino <- as.data.frame(vinhosret[indice_vinho, ])
+#teste <- as.data.frame(vinhosret[-indice_vinho, ])
+
+```
+
+# Regressão linear
+Primeiramente vamos executar um algoritmo de regressão linear, com o intuito de iniciar o processo de estimar a variavel quality
+
+```{r}
+#model <- lm(treino$quality ~ treino$freesulfurdioxide+treino$totalsulfurdioxide+treino$density+treino$chlorides+treino$alcohol+treino$sulphates+treino$volatileacidity+treino$density)
+#summary(model)
+#val_pred <- predict(model, newdata=teste, interval = 'prediction', level = 0.80)
+#summary(val_pred)
+
+```
+
+```{r}
+#ggplot(data=model, aes(model$residuals)) +
+#geom_histogram(binwidth = 1, color = "black", fill = "red4") +
+#theme(panel.background = element_rect(fill = "white"),
+#axis.line.x=element_line(),
+#axis.line.y=element_line()) +
+#ggtitle("Histograma dos Residuos")
+```
+
+```{r}
+#ggplot(data = vinhos, aes(x = vinhos$quality, y = vinhos$freesulfurdioxide+vinhos$totalsulfurdioxide+vinhos$density+vinhos$chlorides+vinhos$alcohol+vinhos$sulphates+vinhos$volatileacidity+vinhos$density)) +
+#geom_point() +
+#stat_smooth(method = "lm", col = "dodgerblue3") +
+#theme(panel.background = element_rect(fill = "white"),
+#axis.line.x=element_line(),
+#axis.line.y=element_line()) +
+#ggtitle("Modelo linear dos dados")
+```
+
