@@ -55,6 +55,7 @@ vinhos <- read.csv("BaseWine_Red_e_White.csv", header = TRUE, sep = ";", dec = "
 ******
 ```{r}
 summary(vinhos)
+str(vinhos)
 ```
 
 Dataset com 13 variaveis, dentre elas a variável "quality" indica a qualidade medida de cada vinho.
@@ -76,7 +77,7 @@ Dataset com 13 variaveis, dentre elas a variável "quality" indica a qualidade m
 Como descrito no dataset a variável "quality" também é qualitativa, porém ordinal, para que possa ser analisada adequadamente é necessária a seguinte transformação:
 
 ```{r}
-vinhos$quality <- as.factor(vinhos$quality)
+#vinhos$quality <- as.factor(vinhos$quality)
 ```
 
 
@@ -94,13 +95,25 @@ skim(vinhos) %>% skimr::kable()
 ******
 Dada a existência da varíável "Vinho" que divide o dataset em duas categorias é válido analisar quantitativas por categoria e para tal o dataset foi dividido em dois subsets a partir desta varíável.
 
-
 ```{r}
 brancos <- vinhos%>%filter(Vinho == "WHITE")%>%select(2:14)
 tintos <- vinhos%>%filter(Vinho == "RED")%>%select(2:14)
 summary(brancos)
 summary(tintos)
 ```
+
+ Com a divisão, não será mais necessário a existencia coluna "Vinho" nos subsets, deixando somente as variaveis de tipo numerica.
+ 
+```{r}
+brancos <- subset(brancos, select = -c(Vinho))
+
+tintos <- subset(tintos, select = -c(Vinho))
+
+str(brancos)
+str(tintos)
+
+```
+ 
  
 ```{r}
 hist.default <- function(x,
@@ -218,20 +231,21 @@ tOut.alcohol <- plotaGraficos(tintos$alcohol, "alcohol")
 ```
 
 ## Removendo Outliers
+
 ### Vinhos Brancos
 ```{r}
-brancos <- brancos%>%filter(fixedacidity < bOut.fixedacidity)
-brancos <- brancos%>%filter(volatileacidity < bOut.volatileacidity)
-brancos <- brancos%>%filter(citricacid < bOut.citricacid)
-brancos <- brancos%>%filter(residualsugar < bOut.residualsugar)
-brancos <- brancos%>%filter(chlorides < bOut.chlorides)
-brancos <- brancos%>%filter(freesulfurdioxide < bOut.freesulfurdioxide)
-brancos <- brancos%>%filter(totalsulfurdioxide < bOut.totalsulfurdioxide )
-brancos <- brancos%>%filter(totalsulfurdioxide < bOut.totalsulfurdioxide)
-brancos <- brancos%>%filter(pH < bOut.pH)
-brancos <- brancos%>%filter(sulphates < bOut.sulphates)
-brancos <- brancos%>%filter(alcohol < bOut.alcohol)
-dim(brancos)
+#brancos <- brancos%>%filter(fixedacidity < bOut.fixedacidity)
+#brancos <- brancos%>%filter(volatileacidity < bOut.volatileacidity)
+#brancos <- brancos%>%filter(citricacid < bOut.citricacid)
+#brancos <- brancos%>%filter(residualsugar < bOut.residualsugar)
+#brancos <- brancos%>%filter(chlorides < bOut.chlorides)
+#brancos <- brancos%>%filter(freesulfurdioxide < bOut.freesulfurdioxide)
+#brancos <- brancos%>%filter(totalsulfurdioxide < bOut.totalsulfurdioxide )
+#brancos <- brancos%>%filter(totalsulfurdioxide < bOut.totalsulfurdioxide)
+#brancos <- brancos%>%filter(pH < bOut.pH)
+#brancos <- brancos%>%filter(sulphates < bOut.sulphates)
+#brancos <- brancos%>%filter(alcohol < bOut.alcohol)
+#dim(brancos)
 
 
 #plotaGraficos(brancos$fixedacidity, "fixedacidity")
@@ -278,29 +292,114 @@ dim(brancos)
 # Análise exploratória de dados
 ******
 
-Primeiramente vamos analisar a variável quality separadamente
-```{r }
+## Definindo a Qualidade
 
-#vinhos %>% group_by(quality) %>% summarise(count = n()) %>% 
-  #ggplot(aes(x = reorder(quality, count), y = count, fill = as.factor(quality), label = count)) +
-  #geom_bar(stat = "identity") + 
-  #geom_text(hjust = -.1) +
- # theme_light() +
-  #scale_fill_brewer(palette = "Blues", direction = -1) +
-  #coord_flip(ylim = c(0, 3000)) +
-  #labs(x = "Quality", y = "Count", fill = "Quality")
+Com o intuito de demonstrar quais as características influenciam diretamete na qualidade do vinho.
+
+Faremos diversas análises para chegar o mais próximo desta definição.
+
+### Frequencia e Outliers
+
+Primeiramente vamos analisar a variável quality separadamente:
+
+Abaixo, vamos demontrar a frequêcia da variável em ambos os tipos de vinhos e se existem a presença de Outliers.
+
+```{r}
+
+bOut.quality <- plotaGraficos(brancos$quality, "Vinhos Brancos")
+tOut.quality <- plotaGraficos(tintos$quality, "Vinhos tintos")
+
 ```
 
+Veja que o campo quality possui poucos outliers.
 
+A maior parte da nota recibida está entre 5 e 6.
+
+Por ser uma variavel também qualitativa, não serão removidos os Outliers neste momento.
 
 ******
 # Correlação de variaveis
 ******
 
-Gerando correlação das variaveis para ajudar a entender quais variaveis são relacionadas e quais variaveis podem nos ajudar a decidir a qualidade do vinho
-```{r,message=FALSE,warning=FALSE}
-#corrplot(cor(vinhosret))
+Gerando a correlação das variaveis, vai permitir o entendimento de quais carácteristicas estão mais relacionadas a nota de qualidade dadas aos vinho.
+
+Vamos começar pela matriz de correlação.
+
+## Matriz de Correlação
+
+ Matriz de correlação mostra os valores de correlação de Pearson, que medem o grau de relação linear entre cada par de itens ou variáveis. Os valores de correlação podem cair entre -1 e +1.
+
+```{r}
+matcor_brancos <- cor(brancos)
+matcor_tintos <- cor(tintos)
 ```
+
+Para cada tipo de vinho, será gerada uma Matriz.
+
+### Matriz de Vinhos Brancos.
+
+```{r}
+
+corrplot::corrplot(matcor_brancos, method="circle", order="hclust")
+
+```
+
+Os campos que tiveram mais correlações com `qualidade` foram (respectivamente na ordem de maior para menor correlação):
+
+* `Alcohol`: 0.43 (correlação positiva);
+* `Density`: -0.31 (correlação negativa)
+
+Mas pela tabela, podemos observar que existem correlações fortes dos campos
+
+`Alcohol` e `Density` com uma serie de outros campos.
+
+
+### Matriz de Vinhos Tintos.
+
+```{r}
+
+corrplot::corrplot(matcor_tintos, method="circle", order="hclust")
+
+```
+
+Os campos que tiveram mais correlações com `qualidade` foram (respectivamente na ordem de maior para menor correlação):
+
+* `Álcool`: 0.43 (correlação positiva);
+* `Volatilidade do Ácido`: -0.39 (correlação negativa)
+
+Porém, diferentemente dos vinhos Brancos, houve uma correlação negativa maior em `volatilidade do ácido` do que em `densidade`.
+
+Em relação ao `álcool`, o resultado foi bem similar ao vinho Brancos. 
+
+### Conclusão
+
+A Qualidade dos vinhos se dá pelo teor alcolico, Densidade ou volatilidade do ácido, porém, esses campos apresentam uma alta relação com outras características físico-químicas.
+
+Em uma árvore de regressão ficará mais claro, mas veremos este modelo mais a frente.
+
+## Regressão Linear 
+
+Regressão Linear é o quadrado mínimo estimador de um modelo de regressão linear com uma única variável explicativa (Quality).
+
+Primeiro, vamos padronizar os valores de ambas as bases.
+
+```{r,message=FALSE,warning=FALSE}
+padr_brancos <- scale(brancos)
+padr_tintos <- scale(tintos)
+
+summary(padr_brancos)
+summary(padr_tintos)
+```
+
+
+```{r}
+
+modelbrancos <- lm(brancos$quality ~ brancos$alcohol+brancos$density)
+summary(modelbrancos)
+
+```
+
+
 
 ***
 # Correlação + Cluster
