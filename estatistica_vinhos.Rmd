@@ -4,7 +4,8 @@ output:
   html_document: 
     code_folding: hide
     fig_caption: yes
-    fig_height: 5.0
+    fig_height: 7.0
+    fig_width: 14.0
     highlight: tango
     number_sections: yes
     theme: cerulean
@@ -25,7 +26,8 @@ library(randomForest)
 library(caret)
 library(readr)
 library(gmodels)
-library(outliers)
+library(rpart)
+library(rpart.plot)
 ```
 ******
 # Introdução
@@ -72,13 +74,7 @@ Dataset com 13 variaveis, dentre elas a variável "quality" indica a qualidade m
  - **sulphates:** Indica a quantidade de sulfatos, um aditivo de vinho que pode contribuir para os níveis de gás de dióxido de enxofre (S02), que age como um antimicrobiano e antioxidante;
  - **alcohol:** Indica o teor alcoólico percentual do vinho;
  - **quality:** variável de saída (com base em dados sensoriais) que poderiam ser de 0 a 10 sendo zero muito ruim e 10 muito excelente;
- - **Vinho:** variável qualitativa nominal que indica se o vinho é tinto ou branco;
- 
-Como descrito no dataset a variável "quality" também é qualitativa, porém ordinal, para que possa ser analisada adequadamente é necessária a seguinte transformação:
-
-```{r}
-#vinhos$quality <- as.factor(vinhos$quality)
-```
+ - **Vinho:** variável qualitativa nominal que indica se o vinho é tinto ou branco.
 
 
 ******
@@ -91,30 +87,10 @@ skim(vinhos) %>% skimr::kable()
 ```
 
 ******
-## Divisão categórica
+## Detectando Outliers
 ******
-Dada a existência da varíável "Vinho" que divide o dataset em duas categorias é válido analisar quantitativas por categoria e para tal o dataset foi dividido em dois subsets a partir desta varíável.
+Outliers são observações que apresentam grandes afastamentos das demais e/ou são inconsistentes com estas. Um bom método de verificar a existência de outliers é a análise gráfica, através de um histograma sobreposto pela distribuição normal e duas linhas que delimitem o limite mínimo e máximo de corte, também é usado o gráfico bloxpot.
 
-```{r}
-brancos <- vinhos%>%filter(Vinho == "WHITE")%>%select(2:14)
-tintos <- vinhos%>%filter(Vinho == "RED")%>%select(2:14)
-summary(brancos)
-summary(tintos)
-```
-
- Com a divisão, não será mais necessário a existencia coluna "Vinho" nos subsets, deixando somente as variaveis de tipo numerica.
- 
-```{r}
-brancos <- subset(brancos, select = -c(Vinho))
-
-tintos <- subset(tintos, select = -c(Vinho))
-
-str(brancos)
-str(tintos)
-
-```
- 
- 
 ```{r}
 hist.default <- function(x,
                          breaks = "Sturges",
@@ -183,139 +159,32 @@ hist(fVinho, main = paste("Histograma de ",label), xlab = label, ylab="Frequênc
 abline(v = mean(fVinho) - 2 * sd(fVinho), col = "red")
 abline(v = mean(fVinho) + 2 * sd(fVinho), col = "red")
 boxplot(fVinho)
-q = quantile(fVinho)
-return(q[2] + 1.5 * q[2] -q[4])
-
 }
-```
 
-******
-## Detectando Outliers
-******
-Outliers são observações que apresentam grandes afastamentos das demais e/ou são inconsistentes com estas. Um bom método de verificar a existência de outliers é a análise gráfica, através de um histograma sobreposto pela distribuição normal e duas linhas que delimitem o limite mínimo e máximo de corte, também é usado o gráfico bloxpot. Pelo boxplor é possível determinar o ponto do outler com a seguinte fórmula:
-
-$$Q3 + 1,5 Q3 - Q1$$
-
-******
-### Vinhos Brancos
-******
-```{r}
-bOut.fixedacidity <- plotaGraficos(brancos$fixedacidity, "fixedacidity")
-bOut.volatileacidity <- plotaGraficos(brancos$volatileacidity, "volatileacidity")
-bOut.citricacid <- plotaGraficos(brancos$citricacid, "citricacid")
-bOut.residualsugar <- plotaGraficos(brancos$residualsugar, "residualsugar")
-bOut.chlorides <- plotaGraficos(brancos$chlorides, "chlorides")
-bOut.freesulfurdioxide <- plotaGraficos(brancos$freesulfurdioxide, "freesulfurdioxide")
-bOut.totalsulfurdioxide <- plotaGraficos(brancos$totalsulfurdioxide, "totalsulfurdioxide")
-bOut.density<- plotaGraficos(brancos$density, "density")
-bOut.pH <- plotaGraficos(brancos$pH, "pH")
-bOut.sulphates <- plotaGraficos(brancos$sulphates, "sulphates")
-bOut.alcohol <- plotaGraficos(brancos$alcohol, "alcohol")
-```
-
-******
-### Vinhos Tintos
-******
-```{r}
-tOut.fixedacidity <- plotaGraficos(tintos$fixedacidity, "fixedacidity")
-tOut.volatileacidity <- plotaGraficos(tintos$volatileacidity, "volatileacidity")
-tOut.citricacid <- plotaGraficos(tintos$citricacid, "citricacid")
-tOut.residualsugar <- plotaGraficos(tintos$residualsugar, "residualsugar")
-tOut.chlorides <- plotaGraficos(tintos$chlorides, "chlorides")
-tOut.freesulfurdioxide <- plotaGraficos(tintos$freesulfurdioxide, "freesulfurdioxide")
-tOut.totalsulfurdioxide <- plotaGraficos(tintos$totalsulfurdioxide, "totalsulfurdioxide")
-tOut.density<- plotaGraficos(tintos$density, "density")
-tOut.pH <- plotaGraficos(tintos$pH, "pH")
-tOut.sulphates <- plotaGraficos(tintos$sulphates, "sulphates")
-tOut.alcohol <- plotaGraficos(tintos$alcohol, "alcohol")
+plotaGraficos(vinhos$fixedacidity, "fixedacidity")
+plotaGraficos(vinhos$volatileacidity, "volatileacidity")
+plotaGraficos(vinhos$citricacid, "citricacid")
+plotaGraficos(vinhos$residualsugar, "residualsugar")
+plotaGraficos(vinhos$chlorides, "chlorides")
+plotaGraficos(vinhos$freesulfurdioxide, "freesulfurdioxide")
+plotaGraficos(vinhos$totalsulfurdioxide, "totalsulfurdioxide")
+plotaGraficos(vinhos$density, "density")
+plotaGraficos(vinhos$pH, "pH")
+plotaGraficos(vinhos$sulphates, "sulphates")
+plotaGraficos(vinhos$alcohol, "alcohol")
 ```
 
 ## Removendo Outliers
-
-### Vinhos Brancos
+Pelo boxplot é possível visualizar que há grupos distintos de vinhos dadas as características físico-químicas e a qualidade entre eles, mas também é possível notar que nas variáveis "residualsugar", "freesilfurdioxide" e "totalsulfurdioxide" existem observações com valores muito distantes dos agrupamentos no gráfico e consideramos estas possíveis outliers, sendo assim, serão removidos para que não interfiram no resultado da análise e dos algoritmos
 ```{r}
-#brancos <- brancos%>%filter(fixedacidity < bOut.fixedacidity)
-#brancos <- brancos%>%filter(volatileacidity < bOut.volatileacidity)
-#brancos <- brancos%>%filter(citricacid < bOut.citricacid)
-#brancos <- brancos%>%filter(residualsugar < bOut.residualsugar)
-#brancos <- brancos%>%filter(chlorides < bOut.chlorides)
-#brancos <- brancos%>%filter(freesulfurdioxide < bOut.freesulfurdioxide)
-#brancos <- brancos%>%filter(totalsulfurdioxide < bOut.totalsulfurdioxide )
-#brancos <- brancos%>%filter(totalsulfurdioxide < bOut.totalsulfurdioxide)
-#brancos <- brancos%>%filter(pH < bOut.pH)
-#brancos <- brancos%>%filter(sulphates < bOut.sulphates)
-#brancos <- brancos%>%filter(alcohol < bOut.alcohol)
-#dim(brancos)
+vinhos <- vinhos%>%filter(residualsugar < 40)
+vinhos <- vinhos%>%filter(freesulfurdioxide < 200)
+vinhos <- vinhos%>%filter(totalsulfurdioxide < 400)
 
-
-#plotaGraficos(brancos$fixedacidity, "fixedacidity")
-#plotaGraficos(brancos$volatileacidity, "volatileacidity")
-#plotaGraficos(brancos$citricacid, "citricacid")
-#plotaGraficos(brancos$residualsugar, "residualsugar")
-#plotaGraficos(brancos$chlorides, "chlorides")
-#plotaGraficos(brancos$freesulfurdioxide, "freesulfurdioxide")
-#plotaGraficos(brancos$totalsulfurdioxide, "totalsulfurdioxide")
-#plotaGraficos(brancos$density, "density")
-#plotaGraficos(brancos$pH, "pH")
-#plotaGraficos(brancos$sulphates, "sulphates")
-#plotaGraficos(brancos$alcohol, "alcohol")
+plotaGraficos(vinhos$residualsugar, "residualsugar")
+plotaGraficos(vinhos$freesulfurdioxide, "freesulfurdioxide")
+plotaGraficos(vinhos$totalsulfurdioxide, "totalsulfurdioxide")
 ```
-
-### Vinhos Tintos
-```{r}
-#tintos <- tintos[-which(tintos$fixedacidity %in% tOut.fixedacidity),]
-#tintos <- tintos[-which(tintos$volatileacidity %in% tOut.volatileacidity),]
-#tintos <- tintos[-which(tintos$citricacid %in% tOut.residualsugar),]
-#tintos <- tintos[-which(tintos$residualsugar %in% tOut.residualsugar),]
-#tintos <- tintos[-which(tintos$chlorides %in% tOut.chlorides),]
-#tintos <- tintos[-which(tintos$freesulfurdioxide %in% tOut.freesulfurdioxide),]
-#tintos <- tintos[-which(tintos$totalsulfurdioxide %in% tOut.totalsulfurdioxide),]
-#tintos <- tintos[-which(tintos$density %in% tOut.density),]
-#tintos <- tintos[-which(tintos$pH %in% tOut.pH),]
-#tintos <- tintos[-which(tintos$sulphates %in% tOut.sulphates),]
-#tintos <- tintos[-which(tintos$alcohol %in% tOut.alcohol),]
-
-#plotaGraficos(tintos$fixedacidity, "fixedacidity")
-#plotaGraficos(tintos$volatileacidity, "volatileacidity")
-#plotaGraficos(tintos$citricacid, "citricacid")
-#plotaGraficos(tintos$residualsugar, "residualsugar")
-#plotaGraficos(tintos$chlorides, "chlorides")
-#plotaGraficos(tintos$freesulfurdioxide, "freesulfurdioxide")
-#plotaGraficos(tintos$totalsulfurdioxide, "totalsulfurdioxide")
-#plotaGraficos(tintos$density, "density")
-#plotaGraficos(tintos$pH, "pH")
-#plotaGraficos(tintos$sulphates, "sulphates")
-#plotaGraficos(tintos$alcohol, "alcohol")
-```
-
-******
-# Análise exploratória de dados
-******
-
-## Definindo a Qualidade
-
-Com o intuito de demonstrar quais as características influenciam diretamete na qualidade do vinho.
-
-Faremos diversas análises para chegar o mais próximo desta definição.
-
-### Frequencia e Outliers
-
-Primeiramente vamos analisar a variável quality separadamente:
-
-Abaixo, vamos demontrar a frequêcia da variável em ambos os tipos de vinhos e se existem a presença de Outliers.
-
-```{r}
-
-bOut.quality <- plotaGraficos(brancos$quality, "Vinhos Brancos")
-tOut.quality <- plotaGraficos(tintos$quality, "Vinhos tintos")
-
-```
-
-Veja que o campo quality possui poucos outliers.
-
-A maior parte da nota recibida está entre 5 e 6.
-
-Por ser uma variavel também qualitativa, não serão removidos os Outliers neste momento.
 
 ******
 # Correlação de variaveis
@@ -330,76 +199,74 @@ Vamos começar pela matriz de correlação.
  Matriz de correlação mostra os valores de correlação de Pearson, que medem o grau de relação linear entre cada par de itens ou variáveis. Os valores de correlação podem cair entre -1 e +1.
 
 ```{r}
-matcor_brancos <- cor(brancos)
-matcor_tintos <- cor(tintos)
+matcor <- cor(vinhos%>%select(2:13))
+panel.cor <- function(x, y, digits=2, prefix ="", cex.cor,
+                      ...)  {
+  usr <- par("usr")
+  on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  r <- cor(x, y , use = "pairwise.complete.obs")
+  txt <- format(c(r, 0.123456789), digits = digits) [1]
+  txt <- paste(prefix, txt, sep = "")
+  if (missing(cex.cor))
+    cex <- 0.8/strwidth(txt)
+  text(0.5, 0.5, txt, cex = cex * abs(r))
+}
+pairs(vinhos%>%select(2:13), lower.panel=panel.smooth, upper.panel=panel.cor)
 ```
-
-Para cada tipo de vinho, será gerada uma Matriz.
-
-### Matriz de Vinhos Brancos.
-
-```{r}
-
-corrplot::corrplot(matcor_brancos, method="circle", order="hclust")
-
-```
-
-Os campos que tiveram mais correlações com `qualidade` foram (respectivamente na ordem de maior para menor correlação):
-
-* `Alcohol`: 0.43 (correlação positiva);
-* `Density`: -0.31 (correlação negativa)
-
-Mas pela tabela, podemos observar que existem correlações fortes dos campos
-
-`Alcohol` e `Density` com uma serie de outros campos.
-
-
-### Matriz de Vinhos Tintos.
-
-```{r}
-
-corrplot::corrplot(matcor_tintos, method="circle", order="hclust")
-
-```
-
-Os campos que tiveram mais correlações com `qualidade` foram (respectivamente na ordem de maior para menor correlação):
-
-* `Álcool`: 0.43 (correlação positiva);
-* `Volatilidade do Ácido`: -0.39 (correlação negativa)
-
-Porém, diferentemente dos vinhos Brancos, houve uma correlação negativa maior em `volatilidade do ácido` do que em `densidade`.
-
-Em relação ao `álcool`, o resultado foi bem similar ao vinho Brancos. 
 
 ### Conclusão
 
-A Qualidade dos vinhos se dá pelo teor alcolico, Densidade ou volatilidade do ácido, porém, esses campos apresentam uma alta relação com outras características físico-químicas.
+A Qualidade dos vinhos apresenta correlação com o teor alcoólico, densidade e acidez volátil, ainda que não seja um alto grau de correlação, porém, outras variáveis do dataset apresentam alta correlação entre si.
 
-Em uma árvore de regressão ficará mais claro, mas veremos este modelo mais a frente.
+## Estimando a qualidade do vinho 
+Tendo como alvo a qualidade dos vinhos, usaremos as características físico-químicas dos mesmos e usaremos duas técnicas diferentes para obtermos nossa variável de resposta.
 
-## Regressão Linear 
+### Regressão Linear
+A regressão linear consiste em uma função que relaciona as variáveis que contém características do objeto de estudo a uma varíavel depente do mesmo objeto de estudo, gerando assim uma relação entre o resultado observado às suas possíveis explicações.
 
-Regressão Linear é o quadrado mínimo estimador de um modelo de regressão linear com uma única variável explicativa (Quality).
+Usaremos o método stepwise no desenvolvimento do modelo, selecionando assim as variáveis que melhor estimem a qualidade do vinho
 
-Primeiro, vamos padronizar os valores de ambas as bases.
+```{r, message=FALSE, warning=FALSE}
+vinhos_rl <- vinhos%>%select(2:13)
+modelo_rl <- lm(vinhos$quality ~ vinhos_rl$fixedacidity + vinhos_rl$volatileacidity + vinhos_rl$citricacid + vinhos_rl$residualsugar + vinhos_rl$chlorides + vinhos_rl$freesulfurdioxide + vinhos_rl$totalsulfurdioxide + vinhos_rl$density + vinhos_rl$pH + vinhos_rl$sulphates + vinhos_rl$alcohol)
+stepwise<-step(modelo_rl,direction="both")
+summary(stepwise)
 
-```{r,message=FALSE,warning=FALSE}
-padr_brancos <- scale(brancos)
-padr_tintos <- scale(tintos)
-
-summary(padr_brancos)
-summary(padr_tintos)
 ```
+Através da sumarização do modelo podemos observar que a quantidade de sal presente nos vinhos não é relevante para a estimarmos a qualidade e será removida da modelo final
 
+```{r, message=FALSE, warning=FALSE}
+modelo_rl_final <- lm(vinhos_rl$quality ~ vinhos_rl$fixedacidity + vinhos_rl$volatileacidity + vinhos_rl$citricacid + vinhos_rl$residualsugar + vinhos_rl$freesulfurdioxide + vinhos_rl$totalsulfurdioxide + vinhos_rl$density + vinhos_rl$pH + vinhos_rl$sulphates + vinhos_rl$alcohol)
+```
+******
+#### Análise de resíduos
+
+******
+Com o gráfico abaixo podemos concluir que os resíduos da predição com o modelo desenvolvido que a premissa de normalidade é atendida:
+```{r}
+qqnorm(residuals(modelo_rl_final), ylab="Resíduos",xlab="Quantis teóricos",main="")
+qqline(residuals(modelo_rl_final))
+```
+Concluímos que com o modelo de regressão desenvolvido temos um erro quadrático médio de aproximadamente 0,74.
+```{r}
+pred <- predict(modelo_rl_final,interval = "prediction", level = 0.95) 
+fit <- pred[,1]
+mse <- mean((vinhos_rl$quality  - fit)^2)
+sqrt(mse)
+```
+### Arvore de Regressão
 
 ```{r}
+modelo_arvore <- rpart(vinhos_rl$quality ~ vinhos_rl$quality ~ vinhos_rl$fixedacidity + vinhos_rl$volatileacidity + vinhos_rl$citricacid + vinhos_rl$residualsugar + vinhos_rl$freesulfurdioxide + vinhos_rl$totalsulfurdioxide + vinhos_rl$density + vinhos_rl$pH + vinhos_rl$sulphates + vinhos_rl$alcohol, data=vinhos_rl, 
+                     cp = 0.001,minsplit = 15,maxdepth=10)
 
-modelbrancos <- lm(brancos$quality ~ brancos$alcohol+brancos$density)
-summary(modelbrancos)
-
+rpart.plot(modelo_arvore, type=4, extra=1, under=FALSE, clip.right.labs=TRUE,
+           fallen.leaves=FALSE,   digits=2, varlen=-10, faclen=20,
+           cex=0.4, tweak=1.7,
+           compress=TRUE, 
+           snip=FALSE)
 ```
-
-
 
 ***
 # Correlação + Cluster
