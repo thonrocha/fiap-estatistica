@@ -28,6 +28,9 @@ library(readr)
 library(gmodels)
 library(rpart)
 library(rpart.plot)
+library(polycor)
+library(cluster)
+library(fpc)
 ```
 ******
 # Introdução
@@ -255,122 +258,260 @@ fit <- pred[,1]
 mse <- mean((vinhos_rl$quality  - fit)^2)
 sqrt(mse)
 ```
-### Arvore de Regressão
-
+### Árvore de Regressão
+Árvores de Regressão são idênticas às árvores de decisão porém para variáveis escalares, na figura abaixo está a plotagem de uma árvore de regressão de 9 níveis na qual as folhas agrupam os vinhos por sua qualidade, o split do algoritmo foi setado em 325 que é aproximadamente o valor de 5% da amostra. Com este este algorimo atingimos um erro quadrático médio de aproximadamente 0,71.
 ```{r}
-modelo_arvore <- rpart(vinhos_rl$quality ~ vinhos_rl$quality ~ vinhos_rl$fixedacidity + vinhos_rl$volatileacidity + vinhos_rl$citricacid + vinhos_rl$residualsugar + vinhos_rl$freesulfurdioxide + vinhos_rl$totalsulfurdioxide + vinhos_rl$density + vinhos_rl$pH + vinhos_rl$sulphates + vinhos_rl$alcohol, data=vinhos_rl, 
-                     cp = 0.001,minsplit = 15,maxdepth=10)
+modelo_arvore <- rpart(quality ~ fixedacidity + volatileacidity + citricacid + residualsugar + chlorides + freesulfurdioxide + totalsulfurdioxide + density + pH + sulphates + alcohol, data=vinhos_rl, 
+                     cp = 0.001,minsplit = 325,maxdepth=20)
 
 rpart.plot(modelo_arvore, type=4, extra=1, under=FALSE, clip.right.labs=TRUE,
            fallen.leaves=FALSE,   digits=2, varlen=-10, faclen=20,
            cex=0.4, tweak=1.7,
            compress=TRUE, 
            snip=FALSE)
+
+pred_arvore <- predict(modelo_arvore,interval = "prediction", level = 0.95) 
+mse_tree <- mean((vinhos_rl$quality  - pred_arvore)^2)
+sqrt(mse_tree)
 ```
 
-***
-# Correlação + Cluster
-***
+Assim concluímos que entre os dois algoritmos apresentados o de melhor desempenho foi a <b>Árvore de Regressão</b> ainda que com uma diferença muito pequena entre eles.
 
-Incluindo cluster sobre os relacionamentos identificados
+## Classificando entre bons e ruins
+Tendo em mente que os vinhos com nota superior igual à 6 sãos classificados com bons e os inferiores à isso são classificados como ruins podemos criar uma variável qualitativa e criarmos uma nova variável no dataset e trabalharmos sobre os dados que levam a esta classificação.
+```{r}
+vinhos_class <- vinhos%>%
+                select(2:14)%>%
+                mutate(Qualidade = ifelse(quality >= 6, "BOM", "RUIM"))%>%
+                select(-quality)%>%
+                select(-Vinho)
+vinhos_class$Qualidade <- factor(vinhos_class$Qualidade)
 
-```{r,message=FALSE,warning=FALSE}
-#corrplot(cor(vinhosret), order = "hclust", addrect = 2)
+summary(vinhos_class)
 ```
 
-Pela análise temos algumas variáveis que parecem ter relação com a variavel quality: alcohol, 
+### Entendendo a relação das variáveis
+Plotamos alguns gráficos para entendermos a relação das variáveis com a qualidade atribuída aos vinhos:
+```{r}
+#comando para gerar em 4 linhas e duas colunas os plots
+par (mfrow=c(1,2))
+plot(vinhos_class$Qualidade, vinhos_class$fixedacidity,ylab="fixedacidity",xlab="Qualidade",col=c('red','darkgreen'))
+plot(vinhos_class$Qualidade, vinhos_class$volatilacidity,ylab="volatilacidity",xlab="Qualidade",col=c('red','darkgreen'))
+plot(vinhos_class$Qualidade, vinhos_class$citricacid,ylab="citricacid",xlab="Qualidade",col=c('red','darkgreen'))
+plot(vinhos_class$Qualidade, vinhos_class$residualsugar,ylab="residualsugar",xlab="Qualidade",col=c('red','darkgreen'))
+plot(vinhos_class$Qualidade, vinhos_class$chlorides,ylab="chlorides",xlab="Qualidade",col=c('red','darkgreen'))
+plot(vinhos_class$Qualidade, vinhos_class$freesulfordioxide,ylab="freesulfordioxide",xlab="Qualidade",col=c('red','darkgreen'))
+plot(vinhos_class$Qualidade, vinhos_class$totalsulfordioxide,ylab="totalsulfordioxide",xlab="Qualidade",col=c('red','darkgreen'))
+plot(vinhos_class$Qualidade, vinhos_class$density,ylab="density",xlab="Qualidade",col=c('red','darkgreen'))
+plot(vinhos_class$Qualidade, vinhos_class$pH,ylab="pH",xlab="Qualidade",col=c('red','darkgreen'))
+plot(vinhos_class$Qualidade, vinhos_class$sulphates,ylab="sulphates",xlab="Qualidade",col=c('red','darkgreen'))
+plot(vinhos_class$Qualidade, vinhos_class$alcohol,ylab="alcohol",xlab="Qualidade",col=c('red','darkgreen'))
+```
 
+Alguns dos gráficos como freesulfordioxide e totalsulfordioxide não trazem boa compreensão sobre a relação das variáveis com a qualidade.
 
-
-******
-# Gráficos de dispersão
-******
-
-Gerando gráficos de dispersão com todas as variáveis que apresentaram algum tipo de relação com a variável que decide a qualidade(quality) dos vinhos
-
+Para averiguarmos melhor usaremos o corrplot para enxergarmos as correlações.
 
 ```{r}
-#par (mfrow=c(2,2))
-#plot (x = vinhosret$alcohol, y = vinhosret$quality,
-    #  main = "Relação com Teor alcoólico",
-   #   xlab = "Álcool",
-    #  ylab = "Qualidade")
-
-#plot (x = vinhosret$citricacid, y = vinhosret$quality,
-  #    main = "Relação com Ácido cítrico",
-    #  xlab = "Ácido cítrico",
-   #   ylab = "Qualidade")
-
-#plot (x = vinhosret$freesulfurdioxide, y = vinhosret$quality,
-  #    main = "Relação com Dióxido de enxofre livre",
-    #  xlab = "Dióxido de enxofre livre",
-   #   ylab = "Qualidade")
-
-#plot (x = vinhosret$density, y = vinhosret$quality,
-    #  main = "Relação com Densidade",
-   #   xlab = "Densidade",
-    #  ylab = "Qualidade")
-
-#plot (x = vinhosret$volatileacidity, y = vinhosret$quality,
-   #   main = "Relação com Acidez volátil",
-    #  xlab = "Acidez volátil",
-    #  ylab = "Qualidade")
-
-#plot (x = vinhosret$totalsulfurdioxide, y = vinhosret$quality,
-    #  main = "Relação com Dióxido de enxofre total",
-   #   xlab = "Dióxido de enxofre total",
-    #  ylab = "Qualidade")
-
-#plot (x = vinhosret$chlorides, y = vinhosret$quality,
-  #    main = "Relação com Cloretos",
-    #  xlab = "Cloretos",
-    #  ylab = "Qualidade")
-
-#plot (x = vinhosret$pH, y = vinhosret$quality,
-    #  main = "Relação com pH",
-     # xlab = "pH",
-    #  ylab = "Qualidade")
-
+matcor <- hetcor(vinhos_class)
+panel.cor <- function(x, y, digits=2, prefix ="", cex.cor,
+                      ...)  {
+  usr <- par("usr")
+  on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  r <- cor(x, y , use = "pairwise.complete.obs")
+  txt <- format(c(r, 0.123456789), digits = digits) [1]
+  txt <- paste(prefix, txt, sep = "")
+  if (missing(cex.cor))
+    cex <- 0.8/strwidth(txt)
+  text(0.5, 0.5, txt, cex = cex * abs(r))
+}
+pairs(vinhos_class, lower.panel=panel.smooth, upper.panel=panel.cor)
 ```
+As variáveis que apresentam os maiores graus de correção com a qualidade (BOM ou RUIM) ainda que negativas são teor alcólico, densidade e acidez volátil.
 
-# Criando massa de teste e treino
-Para esse passo, separamos 70% da base como modelo de aprendizagem para treinar os algoritmos e 30% da base como modelo de testes, para validarmos se os algoritmos possuem assertividade
+### Categorizando os vinhos
+A fim de categorizar os vinhos a partir de suas características utilizaremos as técnicas de regressão logística e árvore de decisão. Para o uso de tais técnicas dividiremos nosso dataset em 2/3 para o treinamento e 1/3 para a validação.
 
 ```{r}
-#set.seed(1337)
-#indice_vinho <- createDataPartition(vinhosret$quality, p=0.7, list=F)
-#treino <- as.data.frame(vinhosret[indice_vinho, ])
-#teste <- as.data.frame(vinhosret[-indice_vinho, ])
+particao <- 2/3
+set.seed(2019)
+treino <- sample(1:NROW(vinhos_class), as.integer(particao*NROW(vinhos_class)))
 
+trainData <- vinhos_class[treino,]
+testData  <- vinhos_class[-treino,]
 ```
 
-# Regressão linear
-Primeiramente vamos executar um algoritmo de regressão linear, com o intuito de iniciar o processo de estimar a variavel quality
+
+#### Árvore de decisão
+Com o intuito de selecionarmos as variáveis que utilizaremos na regressão logística primeiros iremos usar a árvore de decisão para identificarmos quais variáveis se apresentam como critérios de decisão.
 
 ```{r}
-#model <- lm(treino$quality ~ treino$freesulfurdioxide+treino$totalsulfurdioxide+treino$density+treino$chlorides+treino$alcohol+treino$sulphates+treino$volatileacidity+treino$density)
-#summary(model)
-#val_pred <- predict(model, newdata=teste, interval = 'prediction', level = 0.80)
-#summary(val_pred)
+modelo_arvore_decisao <- rpart (Qualidade ~ fixedacidity + volatileacidity + citricacid  + residualsugar + chlorides + freesulfurdioxide + totalsulfurdioxide + density  + pH + sulphates + alcohol, data=trainData, cp = 0.006,minsplit = 325,maxdepth=20)
+rpart.plot(modelo_arvore_decisao, type=4, extra=104, under=FALSE, clip.right.labs=TRUE,
+           fallen.leaves=FALSE,   digits=2, varlen=-3, faclen=20,
+           cex=0.4, tweak=1.7,
+           compress=TRUE,
+           snip=FALSE)
 
+qualidade_predita <- predict(modelo_arvore_decisao ,testData , type = "class")
+
+matriz.de.confusao<-table(testData$Qualidade, qualidade_predita)
+matriz.de.confusao
+
+diagonal <- diag(matriz.de.confusao)
+perc.erro <- 1 - sum(diagonal)/sum(matriz.de.confusao)
+perc.erro
+```
+
+Observamos pela matriz de confusão a assertividade do modelo e seu percentual de erro de aproximadamente 25%.
+
+### Regressão Logística
+Assim como na regressão linear a regressão logística se baseia em váriáveis independentes para chegar a uma variável dependente, porém neste caso, uma variável categórica
+```{r}
+modelo_log<-glm(Qualidade ~ fixedacidity + volatileacidity + citricacid  + residualsugar + chlorides + freesulfurdioxide + totalsulfurdioxide + density  + pH + sulphates + alcohol,trainData, family=binomial(link=logit))
+
+predito<-fitted(modelo_log)
+hist(predito)
+fx_predito <- cut(predito, breaks=c(0,0.10,0.20,0.30,0.40,0.50,0.60,0.70,0.80,0.90,1), right=F)
+plot(fx_predito , trainData$Qualidade)
+
+Predito_teste<-predict(modelo_log, testData)
+
+fx_predito1 <- cut(Predito_teste, breaks=c(0,0.50,1), right=F)
+
+MC <- table(testData$Qualidade,  fx_predito1 , deparse.level = 2)
+show(MC) 
+perc.erro.log = 1 - sum(diag(MC))/sum(MC) 
+show(perc.erro.log )
+```
+Como podemos ver nos gráficos acima e também na matriz de confusão, o percentual de erro do modelo foi de aproximadamente 47%, o que nos leva a concluir que para a classificação dos vinhos entre BOM e RUIM o melhor método foi a <b>Árvore de decisão</b>.
+
+## Definindo grupos de vinhos
+Para análise dos grupos de vinhos a partir de sua características físico-químicas iremos utilizar três técnicas, são elas: Clusteres Hierárquicos, Componentes principais e K-means.
+
+```{r}
+vinhos_clusters <- vinhos%>%select(2:12)
+matcor <- cor(vinhos_clusters)
+panel.cor <- function(x, y, digits=2, prefix ="", cex.cor,
+                      ...)  {
+  usr <- par("usr")
+  on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  r <- cor(x, y , use = "pairwise.complete.obs")
+  txt <- format(c(r, 0.123456789), digits = digits) [1]
+  txt <- paste(prefix, txt, sep = "")
+  if (missing(cex.cor))
+    cex <- 0.8/strwidth(txt)
+  text(0.5, 0.5, txt, cex = cex * abs(r))
+}
+pairs(vinhos_clusters, lower.panel=panel.smooth, upper.panel=panel.cor)
+```
+Como já observado anteriormente, algumas das variáveis do dataset apresentam forte correlação entre si como freesulfordioxide e totalsulfordioxide, outro exemplo de forte correlação é alcohol e density. 
+
+### Componentes Principais
+Esta técnica consiste no desenvolvimento de componentes de análise que representem as características dos dados sem que que sofre interferência das variáveis que possuem forte correlação entre elas, possibilitando assim um melhor desempenho dos modelos.
+
+```{r}
+vinhos_clusters_padr <- scale(vinhos_clusters)
+pcacor_vinhos <- prcomp(vinhos_clusters_padr, scale = TRUE) 
+summary(pcacor_vinhos)
+plot(1:11, pcacor_vinhos$sdev^2, type = "b", xlab = "Componente", ylab = "Variância", pch = 20, cex.axis = 0.8, cex.lab = 0.8)
+
+pcacor_vinhos$rotation[, 1:11]
+pcacor_vinhos <- prcomp(vinhos_clusters_padr, scale = TRUE, retx = TRUE)
+
+CP1 <- pcacor_vinhos$x[, 1]
+CP2 <- pcacor_vinhos$x[, 2]
+CP3 <- pcacor_vinhos$x[, 3]
+CP4 <- pcacor_vinhos$x[, 4]
+CP5 <- pcacor_vinhos$x[, 5]
+CP6 <- pcacor_vinhos$x[, 6]
+CP7 <- pcacor_vinhos$x[, 7]
+CP8 <- pcacor_vinhos$x[, 8]
+
+par (mfrow=c(1,2))
+hist(CP1)
+hist(CP2)
+hist(CP3)
+hist(CP4)
+hist(CP5)
+hist(CP6)
+hist(CP7)
+hist(CP8)
+
+pca_vinhos <-cbind(CP1,CP2,CP3,CP4,CP5,CP6,CP7,CP8)
+```
+Baseado no gráfico de Variãncia x Componente percebos que por volta de 8 componentes principais a variância diminui bastante, e interpretando os componentes percebos que cada um leva em conta com um peso maior seja positivo ou negativo cerca de 2 a 3 características físico-químicas dos vinhos. Adotaremos então os componentes de 1 a 8.
+
+### Clusters Hierárquicos
+Assim como o próprio nome diz esta técnica demonstra a hierarquia entre os clusters dentro de um mesmo dataset
+
+```{r}
+hier_cluster<-hclust(dist(vinhos_clusters_padr),method='ward.D2')
+d <- dist(vinhos_clusters_padr, method = "euclidean") 
+plot(hier_cluster, ylab='distancia', cex=0.6)
+
+groups <- cutree(hier_cluster, k=10) 
+rect.hclust(hier_cluster, k=10, border="red") 
+
+groups <- cutree(hier_cluster, k=7) 
+rect.hclust(hier_cluster, k=7, border="blue")
+```
+Nos baseando nas características físico-químicas dos vinhos encontramos 10 clusters distintos, sendo alguns dele muito menores do que os demais e outros bem abrangentes, faz parte da avaliação compararmos os clusters encontrados com os componentes principais e procurarmos semelhanças. Reduzimos então o número de clusters para 7 (em azul) para que possamos obersvar a hierarquia.
+
+```{r}
+hier_cluster_pca<-hclust(dist(pca_vinhos),method='ward.D2')
+d <- dist(pca_vinhos, method = "euclidean") 
+plot(hier_cluster_pca, ylab='distancia', cex=0.6)
+
+groups <- cutree(hier_cluster_pca, k=10) 
+rect.hclust(hier_cluster_pca, k=10, border="red") 
+
+groups <- cutree(hier_cluster_pca, k=7) 
+rect.hclust(hier_cluster_pca, k=7, border="blue")
+```
+Existe uma diferença entre os clusters encontrados com os componentes principais e podemos inferir que esse diferença se se deve ao motivo dos componentes não sofrem com a alta correlação entre as variáveis. Podemos observar também que a diferença se repete mesmo quando diminuimos a quantidade de clusters, entretanto, quando usamos os componentes principais é perceptível a existência de apenas um grupo muito pequeno o que não ocorre quando nos baseamos nas variáveis explicativas do dataset.
+
+### K-means
+É uma técnica não hierárquica que consiste na formação de clusters que agrupem observações a partir de um ponto central baseado na distância da observação ao ponto central, ao fim do k-means as observações estarão clusterizadas em torno do centróido ao qual tem a menor distância.
+
+```{r}
+wss <- (nrow(vinhos_clusters_padr)-1)*sum(apply(vinhos_clusters_padr,2,var))
+for (i in 2:100) wss[i] <- sum(kmeans(vinhos_clusters_padr,
+                                     centers=i, iter.max = 50)$withinss)
+plot(1:100, wss, type="b", xlab="Número de clusters") 
+```
+
+Analisando o gráfico acima podemos verificar que com cerca 90 clusters teremos poucas diferenças entre observações que indiquem a existe de um novo cluster com características muito específicas.
+
+```{r}
+set.seed(2019)
+output_cluster<-kmeans(vinhos_clusters_padr,90, iter = 50)
+cluster_vinho<-output_cluster$cluster
+
+table (cluster_vinho)
+
+clusplot(vinhos_clusters_padr, output_cluster$cluster, color=TRUE, shade=TRUE,
+         labels=2, lines=0 , cex=0.75)
+
+plotcluster(vinhos_clusters_padr, output_cluster$cluster) 
 ```
 
 ```{r}
-#ggplot(data=model, aes(model$residuals)) +
-#geom_histogram(binwidth = 1, color = "black", fill = "red4") +
-#theme(panel.background = element_rect(fill = "white"),
-#axis.line.x=element_line(),
-#axis.line.y=element_line()) +
-#ggtitle("Histograma dos Residuos")
+wss <- (nrow(pca_vinhos)-1)*sum(apply(pca_vinhos,2,var))
+for (i in 2:100) wss[i] <- sum(kmeans(pca_vinhos,
+                                     centers=i, iter.max = 50)$withinss)
+plot(1:100, wss, type="b", xlab="Número de clusters") 
 ```
-
+Podemos observar que executando o k-means com os componentes principais encontramos cerca 80 clusters com tamanhos diferentes dos encontrados anteriormente como podemos ver abaixo.
 ```{r}
-#ggplot(data = vinhos, aes(x = vinhos$quality, y = vinhos$freesulfurdioxide+vinhos$totalsulfurdioxide+vinhos$density+vinhos$chlorides+vinhos$alcohol+vinhos$sulphates+vinhos$volatileacidity+vinhos$density)) +
-#geom_point() +
-#stat_smooth(method = "lm", col = "dodgerblue3") +
-#theme(panel.background = element_rect(fill = "white"),
-#axis.line.x=element_line(),
-#axis.line.y=element_line()) +
-#ggtitle("Modelo linear dos dados")
-```
+set.seed(2019)
+output_cluster_pca<-kmeans(pca_vinhos,80, iter = 50)
+cluster_vinho_pca<-output_cluster_pca$cluster
 
+table (cluster_vinho_pca)
+
+clusplot(pca_vinhos, output_cluster_pca$cluster, color=TRUE, shade=TRUE, labels=2, lines=0 , cex=0.75)
+```
+Concluímos que utilizando os componentes principais teremos um número menor de clusters porém com características que possibilitam uma melhor visualização desses agrupamentos.
